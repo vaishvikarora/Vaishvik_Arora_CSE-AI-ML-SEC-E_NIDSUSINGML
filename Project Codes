@@ -1,0 +1,102 @@
+#Training Code
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection  import train_test_split
+
+import joblib
+
+
+url_train = "https://raw.githubusercontent.com/defcom17/NSL_KDD/master/KDDTrain+.txt"
+
+print("Loading NSL-KDD training data...")
+col_names = [  
+    "duration", "protocol_type", "service", "flag", "src_bytes", "dst_bytes", "land", "wrong_fragment",
+    "urgent", "hot", "num_failed_logins", "logged_in", "num_compromised", "root_shell", "su_attempted",
+    "num_root", "num_file_creations", "num_shells", "num_access_files", "num_outbound_cmds",
+    "is_host_login", "is_guest_login", "count", "srv_count", "serror_rate", "srv_serror_rate",
+    "rerror_rate", "srv_rerror_rate", "same_srv_rate", "diff_srv_rate", "srv_diff_host_rate",
+    "dst_host_count", "dst_host_srv_count", "dst_host_same_srv_rate", "dst_host_diff_srv_rate",
+    "dst_host_same_src_port_rate", "dst_host_srv_diff_host_rate", "dst_host_serror_rate",
+    "dst_host_srv_serror_rate", "dst_host_rerror_rate", "dst_host_srv_rerror_rate", "label", "difficulty"
+]
+
+df = pd.read_csv(url_train, names=col_names)
+
+df.drop("difficulty", axis=1, inplace=True)
+
+df['label'] = df['label'].apply(lambda x: 'normal' if x == 'normal' else 'attack')
+
+cat_cols = ['protocol_type', 'service', 'flag']
+df[cat_cols] = df[cat_cols].apply(LabelEncoder().fit_transform)
+
+y = LabelEncoder().fit_transform(df['label'])
+X = df.drop('label', axis=1)
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+print("Training model...")
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_scaled, y)
+
+joblib.dump(model, "nsl_model.pkl")
+joblib.dump(scaler, "nsl_scaler.pkl")
+print("Model and scaler saved.")
+
+#TEST CODE
+import pandas as pd
+import joblib
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+print("Loading NSL-KDD test data...")
+url_test = "https://raw.githubusercontent.com/defcom17/NSL_KDD/master/KDDTest+.txt"
+
+col_names = [
+    "duration", "protocol_type", "service", "flag", "src_bytes", "dst_bytes", "land", "wrong_fragment",
+    "urgent", "hot", "num_failed_logins", "logged_in", "num_compromised", "root_shell", "su_attempted",
+    "num_root", "num_file_creations", "num_shells", "num_access_files", "num_outbound_cmds",
+    "is_host_login", "is_guest_login", "count", "srv_count", "serror_rate", "srv_serror_rate",
+    "rerror_rate", "srv_rerror_rate", "same_srv_rate", "diff_srv_rate", "srv_diff_host_rate",
+    "dst_host_count", "dst_host_srv_count", "dst_host_same_srv_rate", "dst_host_diff_srv_rate",
+    "dst_host_same_src_port_rate", "dst_host_srv_diff_host_rate", "dst_host_serror_rate",
+    "dst_host_srv_serror_rate", "dst_host_rerror_rate", "dst_host_srv_rerror_rate", "label", "difficulty"
+]
+
+df_test = pd.read_csv(url_test, names=col_names)
+df_test.drop("difficulty", axis=1, inplace=True)
+
+df_test['label'] = df_test['label'].apply(lambda x: 'normal' if x == 'normal' else 'attack')
+
+categorical_cols = ['protocol_type', 'service', 'flag']
+for col in categorical_cols:
+    df_test[col] = pd.factorize(df_test[col])[0] 
+
+label_encoder = LabelEncoder()
+y_test = label_encoder.fit_transform(df_test['label'])  
+X_test = df_test.drop('label', axis=1)
+
+print("Loading trained model and scaler...")
+model = joblib.load("nsl_model.pkl")
+scaler = joblib.load("nsl_scaler.pkl")
+
+X_test_scaled = scaler.transform(X_test)
+
+print("Predicting...")
+y_pred = model.predict(X_test_scaled)
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred, target_names=["Attack", "Normal"]))
+print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
+
+conf_matrix = confusion_matrix(y_test, y_pred)
+sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues",
+            xticklabels=["Attack", "Normal"], yticklabels=["Attack", "Normal"])
+plt.title("Confusion Matrix - NSL-KDD Test Set")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.tight_layout()
+plt.show()
